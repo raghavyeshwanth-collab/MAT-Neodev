@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@3.21.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@3.21.0"></script>
+<script src="https://tfhub.dev/google/yamnet/tfjs/1?tfjs-format=compressed"></script>
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Marine Analysis Monitor</title>
+
+<style>
+    body {
+        margin: 0;
+        height: 900vh;
+        overflow-x: hidden;
+        font-family: sans-serif;
+    }
+
+    /* Sky background */
+    .sky {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 40%;
+        background: linear-gradient(to bottom, #fffacd, #ffe8a0);
+        z-index: -4;
+    }
+
+    /* Wavy horizon */
+    .horizon {
+        position: fixed;
+        top: 38%;
+        left: 0;
+        width: 100%;
+        height: 100px;
+        z-index: -3;
+        overflow: hidden;
+    }
+
+    .horizon::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -50%;
+        width: 200%;
+        height: 100%;
+        background: radial-gradient(ellipse at center, 
+            rgba(78, 208, 255, 0.9) 0%, 
+            rgba(78, 208, 255, 0) 70%);
+        animation: wave-horizon 8s ease-in-out infinite;
+    }
+
+    @keyframes wave-horizon {
+        0%, 100% { 
+            transform: translateX(0) scaleY(1);
+        }
+        50% { 
+            transform: translateX(25%) scaleY(1.2);
+        }
+    }
+
+    .ocean {
+        position: fixed;
+        top: 38%;
+        left: 0;
+        width: 100%;
+        height: 900vh;
+        background: linear-gradient(#4ed0ff, #0060a8);
+        z-index: -3;
+        transition: background 0.6s linear;
+        overflow: visible;
+    }
+
+    /* Fish silhouette */
+    .fish {
+        position: fixed;
+        width: 160px;
+        height: 90px;
+        background: rgba(0,0,0,0.45);
+        clip-path: polygon(
+            10% 40%, 22% 32%, 38% 28%, 55% 30%, 68% 40%,
+            80% 26%, 94% 16%, 88% 44%, 94% 72%, 80% 64%,
+            68% 50%, 55% 60%, 38% 62%, 22% 56%
+        );
+        opacity: 0.9;
+        pointer-events: none;
+        transform-origin: 20% 50%;
+    }
+
+    .fish::after {
+        content: "";
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: black;
+        border-radius: 50%;
+        top: 36%;
+        left: 18%;
+        opacity: 0.7;
+    }
+
+    .content {
+        height: 900vh;
+        padding-top: 50vh;
+        text-align: center;
+        color: white;
+        font-size: 35px;
+        text-shadow: 0 3px 10px black;
+        position: relative;
+        z-index: 5;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="sky"></div>
+<div class="horizon"></div>
+<div class="ocean" id="ocean"></div>
+
+<script>
+/* -----------------------------
+   AUTO SCROLL ANIMATION - PAUSE THEN FAST
+   ----------------------------- */
+let autoScrolling = true;
+let autoScrollSpeed = 0;
+let animationFrameId;
+let isFastMode = false;
+let isPaused = true; // Start paused
+
+function autoScroll() {
+    if (autoScrolling) {
+        window.scrollBy(0, autoScrollSpeed);
+        
+        // Stop when reaching the bottom
+        if (window.scrollY >= document.body.scrollHeight - window.innerHeight - 10) {
+            autoScrolling = false;
+            isFastMode = false; // Return to normal mode
+            fishSpawningStarted = true; // Start fish spawning
+        }
+    }
+    animationFrameId = requestAnimationFrame(autoScroll);
+}
+
+// Start with 3 second pause, then go very fast
+setTimeout(() => {
+    autoScrollSpeed = 15; // Much faster scroll speed
+    isFastMode = true;
+    isPaused = false; // End pause
+}, 3000);
+
+// Start auto-scrolling
+autoScroll();
+
+// Stop auto-scroll if user manually scrolls or interacts
+window.addEventListener('wheel', () => { autoScrolling = false; isFastMode = false; isPaused = false; }, { once: true });
+window.addEventListener('touchstart', () => { autoScrolling = false; isFastMode = false; isPaused = false; }, { once: true });
+window.addEventListener('keydown', () => { autoScrolling = false; isFastMode = false; isPaused = false; }, { once: true });
+
+/* -----------------------------
+   DARKEN OCEAN + PARALLAX ON SCROLL
+   ----------------------------- */
+const ocean = document.getElementById("ocean");
+const sky = document.querySelector(".sky");
+const horizon = document.querySelector(".horizon");
+
+window.addEventListener("scroll", () => {
+    const scrollY = window.scrollY;
+    const max = 0.75;
+    const pct = scrollY / (document.body.scrollHeight - window.innerHeight);
+    const dark = Math.min(Math.max(pct * max, 0), max);
+
+    // Darken ocean
+    ocean.style.background = `linear-gradient(
+        rgba(0, 165, 255, ${1 - dark}),
+        rgba(0, 40, 80, 1)
+    )`;
+
+    // Faster parallax to match bubbles: move ocean, horizon, and sky upward
+    const parallaxSpeed = 0.8; // Increased from 0.3 to match bubble movement
+    const offset = scrollY * parallaxSpeed;
+    
+    ocean.style.transform = `translateY(-${offset}px)`;
+    horizon.style.transform = `translateY(-${offset}px)`;
+    sky.style.transform = `translateY(-${offset}px)`;
+});
+
+/* -----------------------------
+   FIXED FISH — WAVE MOTION + HEAD FIRST
+   ----------------------------- */
+let fishSpawningStarted = false;
+
+function spawnFish() {
+    // Don't spawn fish during fast mode or until we've reached the bottom
+    if (isFastMode || !fishSpawningStarted) return;
+    
+    const fish = document.createElement("div");
+    fish.classList.add("fish");
+
+    // Horizontal fish
+    const baseY = Math.random() * window.innerHeight * 0.7 + window.innerHeight * 0.15;
+
+    const baseSpeed = Math.random() * 0.2 + 0.12;
+    const speed = baseSpeed;
+    
+    const amplitude = Math.random() * 30 + 20;
+    const frequency = Math.random() * 0.003 + 0.002;
+
+    const direction = Math.random() < 0.5 ? 1 : -1;
+    const startX = direction === 1 ? -200 : window.innerWidth + 200;
+
+    if (direction === 1) fish.style.transform = "rotateY(180deg)";
+    else fish.style.transform = "rotateY(0deg)";
+
+    fish.style.left = startX + "px";
+    fish.style.top = baseY + "px";
+
+    document.body.appendChild(fish);
+
+    const startTime = performance.now();
+
+    function animate(now) {
+        const elapsed = now - startTime;
+
+        const x = startX + direction * speed * elapsed;
+        const y = baseY + Math.sin(elapsed * frequency) * amplitude;
+
+        fish.style.left = x + "px";
+        fish.style.top = y + "px";
+
+        if (direction === 1 && x > window.innerWidth + 300) {
+            fish.remove();
+            return;
+        }
+        if (direction === -1 && x < -300) {
+            fish.remove();
+            return;
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+}
+
+// Spawn rate increases during fast mode
+function scheduleFishSpawn() {
+    const baseDelay = Math.random() * 1800 + 1500;
+    const delay = baseDelay; // Normal spawn rate always
+    setTimeout(() => {
+        spawnFish();
+        scheduleFishSpawn();
+    }, delay);
+}
+
+scheduleFishSpawn();
+</script>
+
+<script>
+function spawnBubble() {
+    // Don't spawn bubbles during pause
+    if (isPaused) return;
+    
+    const bubble = document.createElement("div");
+    bubble.setAttribute('data-bubble','1');
+    bubble.style.position = "fixed";
+    bubble.style.bottom = "-20px";
+    const size = Math.random() * 6 + 4;
+    bubble.style.width = bubble.style.height = size + "px";
+    bubble.style.background = "rgba(255,255,255,0.7)";
+    bubble.style.borderRadius = "50%";
+    bubble.style.left = Math.random() * window.innerWidth + "px";
+    bubble.style.zIndex = "-2";
+    document.body.appendChild(bubble);
+
+    const speed = Math.random() * 0.5 + 0.3;
+    const startTime = performance.now();
+
+    function animate(now) {
+        const elapsed = now - startTime;
+        bubble.style.bottom = speed * elapsed + "px";
+        bubble.style.left = parseFloat(bubble.style.left) + Math.sin(elapsed*0.005)*0.5 + "px";
+        if (parseFloat(bubble.style.bottom) > window.innerHeight + 20) bubble.remove();
+        else requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+}
+
+(function spawnBubblesRandomly() {
+    spawnBubble();
+    // Faster bubbles during fast mode
+    const baseDelay = Math.random() * 400 + 300;
+    const delay = isFastMode ? baseDelay / 3 : baseDelay;
+    setTimeout(spawnBubblesRandomly, delay);
+})();
+
+/* -----------------------------
+   Scroll-driven bubble bursts
+   ----------------------------- */
+(function(){
+    const oceanH = 900;
+    let lastY = window.scrollY;
+    const MAX_BUBBLES = 220;
+
+    function activeBubbles(){
+        return document.querySelectorAll('div[data-bubble]').length;
+    }
+
+    window.addEventListener('scroll', ()=>{
+        const y = window.scrollY;
+        const dy = y - lastY;
+        if(dy > 2){
+            const pct = Math.min(Math.max(y / oceanH, 0), 1);
+            const base = 1 + Math.round(pct * 12);
+            const speedFactor = Math.min(8, Math.round(Math.abs(dy) / 12));
+            const spawnCount = base + speedFactor;
+
+            const existing = activeBubbles();
+            const allowed = Math.max(0, MAX_BUBBLES - existing);
+            const willSpawn = Math.min(spawnCount, allowed);
+
+            for(let i=0;i<willSpawn;i++){
+                setTimeout(()=> {
+                    try{ spawnBubble(); }catch(e){}
+                }, Math.random()*160);
+            }
+        }
+        lastY = y;
+    }, { passive: true });
+})();
+</script>
+
+<!-- Comfortaa -->
+<link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Voice assistant widget -->
+<button id="voiceAssistantBtn" class="voice-btn" title="Voice assistant (click to talk)">🗣️</button>
+
+<!-- HEADER -->
+<header>
+  <h1>Marine Analysis Monitor</h1>
+  <nav>
+    <ul>
+      <li class="nav-link" data-target="hero">Home</li>
+      <li class="nav-link" data-target="about">About</li>
+      <li class="nav-link" data-target="info">How It Works</li>
+      <li class="nav-link" data-target="footer">Contact</li>
+    </ul>
+  </nav>
+</header>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <h2>Protecting Marine Life Using AI</h2>
+  <p>Marine Analysis Monitor analyzes underwater audio to detect distress signals, illegal activity, and marine ecosystem health — in real time.</p>
+  <button class="btn" data-scroll="info">Learn More</button>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="info">
+  <div class="info-box">
+    <h3>How It Works</h3>
+    <p>MAM listens to underwater audio and uses AI algorithms to detect abnormal marine activity. It identifies distress signals, illegal fishing activities, and boat engines near protected zones in real time.</p>
+  </div>
+
+  <div class="info-box" id="audio-demo">
+    <h3>AI Audio Demo</h3>
+    <p>Upload an underwater audio clip and see what MAM would detect. You can also play sample animal / environment sounds below.</p>
+
+    <label class="file-row">
+      <input type="file" id="audioUpload" accept="audio/*">
+    </label>
+    <div style="height:8px;"></div>
+    <button class="btn" id="analyzeBtn">Analyze Audio</button>
+
+    <hr style="margin:18px 0; opacity:0.15;">
+
+    <div class="sound-list">
+      <h4 style="margin-bottom:10px;">Play sample sounds</h4>
+      <div class="controls">
+        <button class="btn small" data-sound="whale">Play Whale (sample)</button>
+        <button class="btn small" data-sound="dolphin">Play Dolphin (sample)</button>
+        <button class="btn small" data-sound="boat">Play Boat (sample)</button>
+        <button class="btn small" id="stopSoundBtn">Stop</button>
+      </div>
+      <p style="opacity:.85; margin-top:10px; font-size:14px;">(samples are synthesized in-browser for demo — you can upload real files above)</p>
+    </div>
+  </div>
+
+  <button class="btn" data-scroll="about">About Us</button>
+</section>
+
+<!-- CONTACT / FOOTER -->
+<section class="section" id="footer">
+  <div class="info-box">
+    <h3>Contact & Credits</h3>
+    <p>Demo contact: +1 (555) 987-6543 — support@oceansos.org</p>
+    <p style="margin-top:12px; font-size:14px; opacity:0.85;">Background image: whale concept art included with this demo.</p>
+  </div>
+</section>
+
+<script src="front.js"></script>
+</body>
+</html>

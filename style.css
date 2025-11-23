@@ -1,0 +1,143 @@
+/* ---------- BODY & FONT ---------- */
+body {
+    margin: 0;
+    font-family: "Comfortaa", cursive;
+    background: linear-gradient(135deg, #0a4d8c, #0f7dc2, #0fa4c5);
+    background-size: 300% 300%;
+    animation: oceanGradient 12s ease infinite;
+    color: white;
+    scroll-behavior: smooth;
+}
+
+@keyframes oceanGradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* ---------- HEADER ---------- */
+header {
+    backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.25);
+    padding: 25px 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: fixed;
+    width: 100%;
+    z-index: 10;
+    height: 90px;
+    overflow: hidden;
+    transition: height 0.4s ease, padding 0.4s ease;
+}
+header:hover { height: 220px; }
+
+header h1 {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+}
+
+nav {
+    margin-top: 20px;
+    opacity: 0;
+    transition: opacity 0.6s ease 0.2s;
+}
+header:hover nav { opacity: 1; }
+
+nav ul { display: flex; gap: 50px; list-style: none; justify-content: center; flex-wrap: wrap; }
+nav ul li { font-size: 20px; font-weight: 600; cursor: pointer; transition: color 0.3s ease; }
+nav ul li:hover { color: #b8e9ff; }
+
+/* ---------- HERO SECTION ---------- */
+.hero {
+    text-align: center;
+    padding-top: 180px;
+    padding-bottom: 160px;
+}
+.hero h2 { font-size: 64px; font-weight: 700; margin-bottom: 25px; line-height: 1.2; }
+.hero p { font-size: 24px; width: 65%; margin: auto; opacity: 0.85; line-height: 1.5; }
+
+.btn {
+    padding: 18px 36px;
+    background: #ffffff;
+    color: #0f6bb5;
+    border-radius: 12px;
+    font-size: 22px;
+    cursor: pointer;
+    border: none;
+    font-weight: 700;
+    transition: all 0.3s;
+    margin-top: 25px;
+    position: relative;
+    overflow: hidden;
+}
+.btn:hover { background: #b8e9ff; transform: translateY(-4px); }
+
+/* Ripple effect */
+.ripple {
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    transform: scale(0);
+    animation: rippleAnim 0.6s linear;
+}
+@keyframes rippleAnim { to { transform: scale(4); opacity: 0; } }
+
+/* ---------- SECTIONS ---------- */
+.section { text-align: center; padding: 120px 30px; }
+.info-box {
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255,255,255,0.3);
+    backdrop-filter: blur(10px);
+    padding: 35px;
+    border-radius: 16px;
+    width: 70%;
+    margin: 30px auto;
+    opacity: 0;
+    transform: translateY(40px);
+    transition: 0.8s ease;
+}
+.info-box.visible { opacity: 1 !important; transform: translateY(0) !important; }
+
+.info-box h3 { font-size: 28px; margin-top:0; }
+
+/* AUDIO UPLOAD */
+#audio-demo input[type="file"] {
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.15);
+    color: white;
+    cursor: pointer;
+}
+#audio-demo input[type="file"]::-webkit-file-upload-button {
+    background: #ffffff;
+    color: #0f6bb5;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+#audio-demo input[type="file"]::-webkit-file-upload-button:hover { background: #b8e9ff; }
+
+/* ---------- FOOTER ---------- */
+#footer { padding-bottom: 60px; }
+#footer p { opacity: 0.7; font-size: 18px; margin-top: 20px; }
+
+/* ---------- RESPONSIVE ---------- */
+@media(max-width:900px){
+    .hero h2{ font-size:50px; }
+    .hero p{ font-size:20px; }
+    .btn{ font-size:18px; padding:14px 28px; }
+    nav ul{ gap:30px; }
+}
+@media(max-width:600px){
+    header h1{ font-size:32px; }
+    .hero h2{ font-size:38px; }
+    .hero p{ font-size:16px; }
+    .btn{ font-size:16px; padding:12px 24px; }
+}
